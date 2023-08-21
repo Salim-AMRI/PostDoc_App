@@ -1,0 +1,85 @@
+import json
+import numpy as np
+
+def evaluate_node_state(node_index, node_states, table, k):
+    """
+    Évalue l'état du nœud donné et ses voisins en utilisant la table de correspondance.
+    node_index : index du nœud dont on veut évaluer l'état
+    node_states : liste des états actuels des nœuds
+    table : table de correspondance
+    k : degré de connectivité
+    """
+    n = len(node_states)
+    state_indices = [node_states[(node_index + j) % n] for j in range(k+1)]
+    state_index = np.ravel_multi_index(np.array([int(s) for s in state_indices]), (2,) * (k+1))
+    return table[node_index * 2**(k+1) + state_index]
+
+def calculate_delta_score(node_index, node_states, table, k):
+    """
+    Calcule le delta de score pour le nœud donné en inversant son état.
+    node_index : index du nœud dont on veut calculer le delta de score
+    node_states : liste des états actuels des nœuds
+    table : table de correspondance
+    k : degré de connectivité
+    """
+    current_score = evaluate_node_state(node_index, node_states, table, k)
+    node_states[node_index] = 1 - node_states[node_index]  # Inverser l'état du nœud
+    new_score = evaluate_node_state(node_index, node_states, table, k)
+    node_states[node_index] = 1 - node_states[node_index]  # Revenir à l'état original du nœud
+    return new_score - current_score
+
+def solve_nk_problem(n, k, table, initial_solution, max_iterations=1000):
+    """
+    Résout le problème NK en utilisant l'algorithme Hill Climbing.
+    n : nombre de nœuds dans le réseau
+    k : degré de connectivité
+    table : table de correspondance
+    initial_solution : solution initiale sous forme de liste d'états des nœuds
+    max_iterations : nombre maximum d'itérations de l'algorithme (par défaut : 1000)
+    """
+    node_states = initial_solution.copy()
+    current_score = sum(evaluate_node_state(i, node_states, table, k) for i in range(n))
+    performance_history = [current_score]
+
+    for _ in range(max_iterations):
+        # Choisir un nœud au hasard
+        node_index = np.random.randint(n)
+
+        # Calculer le delta de score pour le nœud choisi
+        delta_score = calculate_delta_score(node_index, node_states, table, k)
+
+        # Mettre à jour l'état du nœud si le delta est positif ou nul
+        if delta_score >= 0:
+            node_states[node_index] = 1 - node_states[node_index]
+            current_score += delta_score
+
+        performance_history.append(current_score)
+
+    return node_states, performance_history
+
+# Charger les données à partir du fichier JSON
+with open("nk_64_2.json", "r") as file:
+    data = json.load(file)
+
+# Extraire les données du fichier JSON
+n = data["N"]
+k = data["K"]
+table_values = data["table"]
+combinations = data["combinations"]
+
+# Vérifier si le degré de connectivité k correspond au nombre de valeurs de la table
+#if len(table_values) != 2**(k+1):
+#    raise ValueError("Le degré de connectivité k ne correspond pas au nombre de valeurs dans la table")
+
+# Remplir la table de correspondance à partir des valeurs du fichier JSON
+table = np.array(table_values)
+
+# Initialiser la solution initiale aléatoirement
+initial_solution = np.random.randint(2, size=n)
+
+# Résoudre le problème NK en utilisant l'algorithme Hill Climbing
+final_solution, performance_history = solve_nk_problem(n, k, table, initial_solution)
+
+# Afficher la solution finale et l'historique des scores
+print("Solution finale :", final_solution)
+print("Historique des scores :", performance_history)

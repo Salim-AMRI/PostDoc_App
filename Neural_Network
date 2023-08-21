@@ -1,0 +1,106 @@
+import json
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# Fonction pour évaluer l'état d'un nœud donné en utilisant la table de correspondance
+def evaluate_node_state(node_index, node_states, table, k):
+    n = len(node_states)
+    state_indices = [node_states[(node_index + j) % n] for j in range(k+1)]
+    state_index = np.ravel_multi_index(np.array([int(s) for s in state_indices]), (2,) * (k+1))
+    return table[node_index * 2**(k+1) + state_index]
+
+# Fonction pour générer les données d'entraînement pour le réseau de neurones
+def generate_training_data(n, k, table):
+    input_data = []
+    output_data = []
+    for i in range(n):
+        for j in range(2):
+            node_states = np.zeros(n)
+            node_states[i] = j
+            input_data.append(node_states)
+            output_data.append(evaluate_node_state(i, node_states, table, k))
+    return torch.tensor(input_data, dtype=torch.float), torch.tensor(output_data, dtype=torch.float)
+
+# Définir l'architecture du réseau de neurones
+class NKNet(nn.Module):
+    def __init__(self, n, hidden_size):
+        super(NKNet, self).__init__()
+        self.fc1 = nn.Linear(n, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        x = torch.sigmoid(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+# Charger les données à partir du fichier JSON
+with open("nk_64_2.json", "r") as file:
+    data = json.load(file)
+
+n = data["N"]
+k = data["K"]
+table_values = data["table"]
+
+# Remplir la table de correspondance à partir des valeurs du fichier JSON
+table = np.array(table_values)
+
+# Générer les données d'entraînement
+input_data, output_data = generate_training_data(n, k, table)
+
+# Définir le modèle et les paramètres d'entraînement
+hidden_size = 16
+model = NKNet(n, hidden_size)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.01)
+
+# Entraînement du modèle avec historique de score et de solution
+num_epochs = 1000
+score_history = []
+solution_history = []
+
+for epoch in range(num_epochs):
+    model.train()
+    optimizer.zero_grad()
+    outputs = model(input_data)
+    loss = criterion(outputs, output_data.view(-1, 1))
+    loss.backward()
+    optimizer.step()
+
+    # Suivre l'historique de score et de solution à chaque époque
+    current_score = loss.item()
+    current_solution = [int(round(x.item())) for x in model(input_data)]
+    score_history.append(current_score)
+    solution_history.append(current_solution)
+
+# Utiliser le modèle pour chercher le voisin le plus proche
+def find_nearest_neighbor(node_index, node_states, model, k):
+    n = len(node_states)
+    best_score = evaluate_node_state(node_index, node_states, table, k)
+    best_neighbor = node_states.copy()
+
+    for j in range(n):
+        neighbor_states = node_states.copy()
+        neighbor_states[j] = 1 - neighbor_states[j]
+        inputs = torch.tensor(neighbor_states, dtype=torch.float).unsqueeze(0)
+        score = model(inputs)
+        if score > best_score:
+            best_score = score
+            best_neighbor = neighbor_states
+
+    return best_neighbor
+
+# Test du modèle
+initial_solution = np.random.randint(2, size=n)
+current_solution = initial_solution.copy()
+
+for _ in range(100):
+    for i in range(n):
+        current_solution = find_nearest_neighbor(i, current_solution, model, k)
+
+# Afficher la solution finale
+print("Solution initiale :", initial_solution)
+print("Solution trouvée par le réseau de neurones :", current_solution)
+print("Historique de score :", score_history)
+print("Historique de solution :", solution_history)

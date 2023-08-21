@@ -1,0 +1,43 @@
+import json
+
+def read_nk_instance_from_txt(filename):
+    with open(filename, "r") as file:
+        lines = file.readlines()
+
+    n, k = map(int, lines[0].split())
+    combinations = []
+    table_values = []
+
+    for line in lines[1:n+1]:
+        combinations.append(list(map(int, line.split())))
+
+    for line in lines[n+1:]:
+        # Ignorer les lignes qui ne sont pas des valeurs numériques
+        try:
+            value = float(line)
+            table_values.append(value)
+        except ValueError:
+            pass
+
+    nk_instance = {
+        "N": n,
+        "K": k,
+        "combinations": combinations,
+        "table": table_values
+    }
+
+    return nk_instance
+
+def write_nk_instance_to_json(nk_instance, json_filename):
+    with open(json_filename, "w") as file:
+        json.dump(nk_instance, file, indent=2)
+
+# Fichier texte de l'instance NK à convertir en JSON
+nk_64_8 = "nk_64_8.txt"
+
+# Convertir l'instance NK en format JSON
+nk_instance = read_nk_instance_from_txt(nk_64_8)
+json_filename = "instance.json"
+write_nk_instance_to_json(nk_instance, json_filename)
+
+print(f"Fichier JSON {json_filename} généré avec succès.")
